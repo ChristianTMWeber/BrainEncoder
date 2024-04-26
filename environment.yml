@@ -1,0 +1,22 @@
+name: brainEncoder_env
+channels:
+  - defaults
+  - conda-forge
+  - pytorch
+  - nvidia 
+dependencies:
+  - python=3.9
+  - pytorch=*=*cuda* #=1.12.1
+  - torchvision #=0.13.1
+  - cudatoolkit=11.8 #=12.4  # Remove or modify if not using an NVIDIA GPU
+  - matplotlib
+  - pillow # Pillow is the friendly PIL fork by Alex Clark and Contributors
+  - tqdm
+  - numpy
+  - torchinfo
+  #- torchsummary # need to look more carefully for conda version, use torchinfo instead
+  - tifffile
+
+  #- pip
+  #- pip:
+  #    - torchinfo  # Optional, for model summaries

@@ -1,0 +1,15 @@
+###################################################
+#  add files and paths here that git should ignore
+###################################################
+
+# ignore compiled python code
+*/__pycache__/*
+
+
+# ignore for now all the data we might train on
+*.tiff
+
+
+
+
+
