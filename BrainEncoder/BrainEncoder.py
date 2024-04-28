@@ -9,7 +9,7 @@ nLayers = 3
 kernelSizes = [3, 3, 3]
 nChannels = [32, 64, 128]
 kernelStrides = [2, 2, 2]
-latendSpaceDim = 2048
+latendSpaceDim = 8192#2048
 
 inputChannelsize = 1 # for now we presume only 1 color channel
 
@@ -44,17 +44,17 @@ class Encoder(nn.Module):
         for i in range(self.layers):
             
             # for the first layer we match the input channel size to the input, e.g. #ColorChannels in input, e.g. 1 for now
-            if i == 0: conv_layers.append( nn.Conv2d( inputChannelsize ,   self.channels[i], 
+            if i == 0: conv_layers.append( nn.Conv3d( inputChannelsize ,   self.channels[i], 
                                               kernel_size=self.kernels[i], stride=self.strides[i],
                                               padding=1))
 
             # for the other layers the input size is given by the output size of the prior layer            
-            else: conv_layers.append(nn.Conv2d(self.channels[i-1],    self.channels[i],
+            else: conv_layers.append(nn.Conv3d(self.channels[i-1],    self.channels[i],
                                          kernel_size=self.kernels[i], stride=self.strides[i],
                                          padding=1))
 
             # we can normalize the mean and standard deviation of the conv. layer to improve learning stability
-            if self.use_batchnorm: conv_layers.append(nn.BatchNorm2d(self.channels[i]))
+            if self.use_batchnorm: conv_layers.append(nn.BatchNorm3d(self.channels[i]))
             
             # GELU - Gaussian Error Linear Units for activation function
             conv_layers.append(nn.GELU()) 
@@ -88,27 +88,27 @@ class Decoder(nn.Module):
         self.linear = nn.Linear(self.input_dim, self.fullyConnectedDim)
         self.conv =  self.define_Convolutional_Layers()
 
-        self.output = nn.Conv2d(self.channels[-1], 1, kernel_size=1, stride=1)
+        self.output = nn.Conv3d(self.channels[-1], 1, kernel_size=1, stride=1)
 
     def define_Convolutional_Layers(self):
         conv_layers = nn.Sequential()
         for i in range(self.layers):
             
             if i == 0: conv_layers.append(
-                            nn.ConvTranspose2d(self.channels[i], self.channels[i],
+                            nn.ConvTranspose3d(self.channels[i], self.channels[i],
                                                kernel_size=self.kernels[i], stride=self.strides[i],
                                                padding=1,output_padding=1)
                             )
             
             else: conv_layers.append(
-                            nn.ConvTranspose2d(self.channels[i-1], self.channels[i],
+                            nn.ConvTranspose3d(self.channels[i-1], self.channels[i],
                                                kernel_size=self.kernels[i], stride=self.strides[i],
                                                padding=1, output_padding=1
                                               )
                             )
             
             if self.use_batchnorm and i != self.layers - 1:
-                conv_layers.append(nn.BatchNorm2d(self.channels[i]))
+                conv_layers.append(nn.BatchNorm3d(self.channels[i]))
 
             conv_layers.append(nn.GELU())
 
@@ -117,8 +117,8 @@ class Decoder(nn.Module):
     
     def forward(self, x):
         x = self.linear(x)
-        # reshape 3D tensor to 4D tensor
-        x = x.reshape(x.shape[0], 128, 4, 4)
+        # reshape 4D tensor to 5D tensor
+        x = x.reshape(x.shape[0], 128, 4, 4, 4)
         x = self.conv(x)
         return self.output(x)
 

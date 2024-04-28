@@ -51,14 +51,18 @@ def collate_array(batch):
 
         process = transforms.Compose([
             transforms.ToTensor(), 
-            transforms.Pad([2])
+            #transforms.Pad(2)
             ])
 
         return process(myArray)
 
     tensorList = [processArray(data[0]) for data in batch]
 
-    imageBatchTensor = torch.concat(tensorList).unsqueeze(1) # should have size [batchSize,1,imageXDim, imageYDim]
+
+    imageBatchTensor = torch.stack(tensorList)  # Stacks along new axis, preserving 3D shape
+    imageBatchTensor = imageBatchTensor.unsqueeze(1)  # Add channel dimension if needed
+
+    #imageBatchTensor = torch.concat(tensorList).unsqueeze(1) # should have size [batchSize,1,imageXDim, imageYDim]
 
     # labels, note that we should convert the labels to LongTensor
     labelTensor = torch.LongTensor([data[1] for data in batch])
@@ -82,7 +86,10 @@ if __name__ == "__main__":
 
 
     # Create a dataset from a folder containing images
-    dataset = ImageSubvolumeDataset("NeuNBrainSegment_compressed.tiff", subvolumeSize = 28)
+
+    subvolumeSize = 32
+
+    dataset = ImageSubvolumeDataset("NeuNBrainSegment_compressed.tiff", subvolumeSize = subvolumeSize)
 
     train_loader = torch.utils.data.DataLoader(dataset, batch_size= config["batchSize"], 
                                                 shuffle=True, collate_fn=collate_array)
@@ -97,7 +104,8 @@ if __name__ == "__main__":
     # For mixed precision training
     scaler = torch.cuda.amp.GradScaler()
 
-    print(summary(model))
+    print(summary(model, input_size=(1, 1, subvolumeSize, subvolumeSize, subvolumeSize)))
+
 
 
     for i in range(config["epochs"]):

@@ -41,7 +41,7 @@ class ImageSubvolumeDataset(Dataset):
         
         subvolumeImages = [ self.image[imgSlice] for imgSlice in self.subvolumeSlices[idx] ]
         
-        subvolumeImages = [np.average(image,2) for image in subvolumeImages] # collapse subvolume image to a 2d one
+        #subvolumeImages = [np.average(image,2) for image in subvolumeImages] # collapse subvolume image to a 2d one
 
         #subvolumeImages = self.image[self.subvolumeSlices[idx]]
 
