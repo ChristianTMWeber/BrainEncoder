@@ -2,6 +2,8 @@ import torch
 
 import BrainEncoder.BrainEncoder as BrainEncoder
 
+from BrainEncoder.ImageSubvolumeDataset import ImageSubvolumeDataset
+
 import torchvision # for handling input data
 from torchvision import transforms # to manipulate input data
 
@@ -43,37 +45,25 @@ def train(model, dataloader, criterion, optimizer):
 
     return train_loss
 
-def collate_2d_tiffs(batch):
+def collate_array(batch):
 
-    def processImage(image):
-
-        image = image.convert("L") # turn image into single color
+    def processArray(myArray):
 
         process = transforms.Compose([
-            transforms.Resize((28, 28)),  # Resize images to the same size as FashionMNIST
             transforms.ToTensor(), 
             transforms.Pad([2])
             ])
 
-        if len(np.shape(image)) >2: # turn 3d images into 2d ones
+        return process(myArray)
 
-            smallestDimLength= min(np.shape(image))
-            smallest_Dim_index = np.shape(image).index(smallestDimLength)
-            
-            image =  np.sum(np.asarray((image)),smallest_Dim_index)
+    tensorList = [processArray(data[0]) for data in batch]
 
-        return process(image)
-
-    imageBatchList = [processImage(data[0]) for data in batch]
-
-    imageBatchTensor = torch.concat(imageBatchList).unsqueeze(1) # should have size [batchSize,1,imageXDim, imageYDim]
+    imageBatchTensor = torch.concat(tensorList).unsqueeze(1) # should have size [batchSize,1,imageXDim, imageYDim]
 
     # labels, note that we should convert the labels to LongTensor
     labelTensor = torch.LongTensor([data[1] for data in batch])
 
     return imageBatchTensor, labelTensor
-
-
 
 
 if __name__ == "__main__":
@@ -92,9 +82,10 @@ if __name__ == "__main__":
 
 
     # Create a dataset from a folder containing images
-    dataset = torchvision.datasets.ImageFolder(root='NeuNBrainSegment_compressed_2d_tif' )#, transform=transform)
-    
-    train_loader = torch.utils.data.DataLoader(dataset, batch_size= config["batchSize"], shuffle=True, collate_fn=collate_2d_tiffs)
+    dataset = ImageSubvolumeDataset("NeuNBrainSegment_compressed.tiff", subvolumeSize = 28)
+
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size= config["batchSize"], 
+                                                shuffle=True, collate_fn=collate_array)
 
 
     model = BrainEncoder.AutoEncoder().to(DEVICE)
