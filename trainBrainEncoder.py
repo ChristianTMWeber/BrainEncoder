@@ -119,4 +119,8 @@ if __name__ == "__main__":
         print(f"Epoch {i+1}/{config['epochs']}\nTrain loss: {train_loss:.2E}\t lr: {curr_lr:.2E}, epoch time: {epochTimeElapsed:.1f} s'")
 
 
+
+    # Save the trained model
+    torch.save(model.state_dict(), 'BrainEncoder.pth')
+
     print("done!")

@@ -4,6 +4,7 @@
 
 # ignore compiled python code
 */__pycache__/*
+__pycache__/*
 
 
 # ignore for now all the data we might train on
