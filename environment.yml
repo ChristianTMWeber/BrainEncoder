@@ -16,6 +16,9 @@ dependencies:
   - torchinfo
   #- torchsummary # need to look more carefully for conda version, use torchinfo instead
   - tifffile
+  - scikit-learn
+  - pandas
+  - seaborn
 
   #- pip
   #- pip:
