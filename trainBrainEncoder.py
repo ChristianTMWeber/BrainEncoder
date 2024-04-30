@@ -1,8 +1,6 @@
 import torch
 
-import BrainEncoder.BrainEncoder as BrainEncoder
 
-from BrainEncoder.ImageSubvolumeDataset import ImageSubvolumeDataset
 
 import torchvision # for handling input data
 from torchvision import transforms # to manipulate input data
@@ -71,6 +69,10 @@ def collate_array(batch):
 
 
 if __name__ == "__main__":
+
+    import BrainEncoder.BrainEncoder as BrainEncoder
+
+    from BrainEncoder.ImageSubvolumeDataset import ImageSubvolumeDataset
 
 
     # Checking is CUDA available on current machine
