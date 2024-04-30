@@ -6,6 +6,9 @@
 */__pycache__/*
 __pycache__/*
 
+# trained models
+*.pth
+
 
 # ignore for now all the data we might train on
 *.tiff

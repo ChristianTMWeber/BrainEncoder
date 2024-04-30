@@ -124,11 +124,11 @@ class Decoder(nn.Module):
 
 class AutoEncoder(nn.Module):
     
-    def __init__(self):
+    def __init__(self, latentSpaceSize = 2):
         super(AutoEncoder, self).__init__()
-        self.encoder = Encoder(output_dim=2, 
+        self.encoder = Encoder(output_dim=latentSpaceSize, 
                                use_batchnorm=True)
-        self.decoder = Decoder(input_dim=2,
+        self.decoder = Decoder(input_dim=latentSpaceSize,
                                use_batchnorm=True)
         
     def forward(self, x):

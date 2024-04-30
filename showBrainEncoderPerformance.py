@@ -10,8 +10,9 @@ from trainBrainEncoder import collate_array
 import matplotlib.pyplot as plt
 
 import numpy as np
+import re
 
-def showTensor( inTensor, outTensor, outputFileName = None, doShow = True):
+def plotTensor( inTensor, outTensor, outputFileName = None, doShow = True):
 
     def prepTensor(aTensor):
 
@@ -53,6 +54,8 @@ def showTensor( inTensor, outTensor, outputFileName = None, doShow = True):
 
 if __name__ == "__main__":
 
+    inputModel = "BrainEncoder_LD1024.pth"
+
     # Checking is CUDA available on current machine
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     print("Project running on device: ", DEVICE)
@@ -60,9 +63,13 @@ if __name__ == "__main__":
     # configurations for the task
     config = {"batchSize": 10}
 
-    model = BrainEncoder.AutoEncoder().to(DEVICE)
+    latentSpaceDimensionality = int(re.search("\d+",inputModel).group())
+
+    model = BrainEncoder.AutoEncoder( latentSpaceSize=latentSpaceDimensionality).to(DEVICE)
     # Load the trained model weights
-    model.load_state_dict(torch.load('BrainEncoder.pth'))
+
+    model.load_state_dict(torch.load(inputModel))
+    
 
     model.eval()  # Set the model to evaluation mode
 
@@ -73,7 +80,7 @@ if __name__ == "__main__":
     dataset = ImageSubvolumeDataset("NeuNBrainSegment_compressed.tiff", subvolumeSize = subvolumeSize)
 
     data_loader = torch.utils.data.DataLoader(dataset, batch_size= config["batchSize"], 
-                                                shuffle=True, collate_fn=collate_array)
+                                                shuffle=False, collate_fn=collate_array)
     
     # Load one batch of test images
     dataiter = iter(data_loader)
@@ -90,7 +97,7 @@ if __name__ == "__main__":
             outputs = model(imagesOnDevice)
 
 
-    showTensor( imagesOnDevice, outputs)
+    plotTensor( imagesOnDevice, outputs)
 
 
     print("done!")

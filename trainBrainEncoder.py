@@ -15,7 +15,7 @@ import time # calculate elapsed time
 
 import numpy as np
 
-def train(model, dataloader, criterion, optimizer):
+def train(model, dataloader, criterion, optimizer,scaler):
     
     model.train()
     train_loss = 0.0
@@ -88,6 +88,7 @@ if __name__ == "__main__":
     # Create a dataset from a folder containing images
 
     subvolumeSize = 32
+    latentSpaceSize = 2048
 
     dataset = ImageSubvolumeDataset("NeuNBrainSegment_compressed.tiff", subvolumeSize = subvolumeSize)
 
@@ -95,7 +96,7 @@ if __name__ == "__main__":
                                                 shuffle=True, collate_fn=collate_array)
 
 
-    model = BrainEncoder.AutoEncoder().to(DEVICE)
+    model = BrainEncoder.AutoEncoder(latentSpaceSize = latentSpaceSize).to(DEVICE)
 
     ### Prep Training
     criterion = torch.nn.MSELoss()
@@ -112,7 +113,7 @@ if __name__ == "__main__":
         epochStartTime = time.time()
 
         curr_lr = float(optimizer.param_groups[0]["lr"])
-        train_loss = train(model, train_loader, criterion, optimizer)
+        train_loss = train(model, train_loader, criterion, optimizer,scaler)
         
         epochTimeElapsed = time.time()-epochStartTime
 
@@ -121,6 +122,6 @@ if __name__ == "__main__":
 
 
     # Save the trained model
-    torch.save(model.state_dict(), 'BrainEncoder.pth')
+    torch.save(model.state_dict(), 'BrainEncoder_LD%i.pth' %latentSpaceSize)
 
     print("done!")
