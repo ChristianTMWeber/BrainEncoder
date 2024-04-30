@@ -2,6 +2,7 @@
 import torch
 from torch import nn
 
+import numpy as np
 
 # Neural Network Model parameters
 # maybe later make them dynamically changeable
@@ -62,10 +63,10 @@ class Encoder(nn.Module):
         return conv_layers
     
     
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.flatten(x)
-        return self.linear(x)
+    def forward(self, x_in):
+        x_conv = self.conv(x_in)
+        x_flat = self.flatten(x_conv)
+        return self.linear(x_flat)
 
 
 class Decoder(nn.Module):
@@ -115,12 +116,12 @@ class Decoder(nn.Module):
         return conv_layers
     
     
-    def forward(self, x):
-        x = self.linear(x)
+    def forward(self, x_in):
+        x_lin = self.linear(x_in)
         # reshape 4D tensor to 5D tensor
-        x = x.reshape(x.shape[0], 128, 4, 4, 4)
-        x = self.conv(x)
-        return self.output(x)
+        x_reshaped = x_lin.reshape(x_lin.shape[0], 128, 4, 4, 4)
+        x_conv = self.conv(x_reshaped)
+        return self.output(x_conv)
 
 class AutoEncoder(nn.Module):
     
