@@ -1,7 +1,9 @@
 import torch
 import numpy as np
 
-import sklearn.manifold 
+import sklearn.manifold as manifold
+import sklearn.cluster  as cluster
+
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -57,48 +59,48 @@ def getLatentSpaceVectors(model, DEVICE, data_loader, saveAs = None):
 
     return     latentSpaceVectors , labelList
 
-def plotLatentSpaceVectors(latentSpaceVectors, doShow = True):
-
-    doDebug = True
+def plotLatentSpaceVectors(latentSpaceVectors, nClusters = None, doShow = True):
 
     n_components = 2
-    TSNE = sklearn.manifold.TSNE(n_components)
+    TSNE = manifold.TSNE(n_components)
 
-    print("do TSNE")
-    start = time.time()
-    tsne_embedding = TSNE.fit_transform(np.asarray(latentSpaceVectors))
-    if doDebug : print( "TSNE time %i s, %i vectors" % ( time.time()-start , len(latentSpaceVectors) ) )
+    latentSpaceArray = np.asarray(latentSpaceVectors)
 
-    tsne_result_df = pd.DataFrame({'TSNE Variable 1': tsne_embedding[:,0],
-                                   'TSNE Variable 2': tsne_embedding[:,1],
-                              })#'label': y})
+    tsne_embedding = TSNE.fit_transform(latentSpaceArray)
+
+    dataDictForPandas = {'TSNE Variable 1': tsne_embedding[:,0],
+                         'TSNE Variable 2': tsne_embedding[:,1],
+                          }
+    scatterHue = None
+
+    
+
+    if nClusters is not  None:
+
+        kmeans = cluster.KMeans(init="k-means++", n_clusters= nClusters, n_init=4, random_state=0)
+
+        kmeans.fit(latentSpaceArray)
+
+        kmeans_labels = kmeans.predict(latentSpaceArray)
+
+        # add the cluster labels to the dict, 
+        dataDictForPandas['Cluster#']= kmeans_labels
+        # and make sure we set the hue variables matched it the relevant dict key
+        scatterHue = 'Cluster#'
+
+    
+    tsne_result_df = pd.DataFrame(dataDictForPandas)
+
     fig, ax = plt.subplots(1)
-    sns.scatterplot(x='TSNE Variable 1', y='TSNE Variable 2', data=tsne_result_df, ax=ax,s=120)
-
+    sns.scatterplot(x='TSNE Variable 1', y='TSNE Variable 2', 
+                    hue=scatterHue, data=tsne_result_df, ax=ax,s=120)
     if doShow: plt.show()
-
-
-
 
     return None
 
 
 
 if __name__ == "__main__":
-
-
-    inputModel = "../BrainEncoder_LD1024.pth"
-
-    import BrainEncoder as BrainEncoder
-    from ImageSubvolumeDataset import ImageSubvolumeDataset
-
-    import sys
-    from os import path
-    # append the parent directory to path, so that we can import methods present in thee parent directly
-    sys.path.append( path.dirname( path.dirname( path.abspath(__file__) ) ) ) 
-
-
-    from trainBrainEncoder import collate_array
     import re
 
 
@@ -131,7 +133,7 @@ if __name__ == "__main__":
     
     latentSpaceVectors , labelList = getLatentSpaceVectors(model, DEVICE, data_loader)
 
-    plotLatentSpaceVectors(latentSpaceVectors)
+    plotLatentSpaceVectors(latentSpaceVectors, nClusters = 3)
 
     print("Done!")
     
