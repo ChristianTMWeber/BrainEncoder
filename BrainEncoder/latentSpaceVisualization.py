@@ -8,9 +8,22 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-import time
-
 def getLatentSpaceVectors(model, DEVICE, data_loader, saveAs = None):
+
+    def extendListWithUnpackedTensor(aList,aTensor):
+
+
+        anArray = aTensor.cpu().numpy()
+
+        nElements = np.shape(anArray)[0]
+
+        tempList = np.split(anArray,nElements,axis=0)
+
+        if len( tempList[0] ) == 1: tempList = [ x[0] for x in tempList ]
+
+        aList.extend(tempList)
+
+        return tempList
 
     latentSpaceVectors = []
     labelList=[]
@@ -24,32 +37,14 @@ def getLatentSpaceVectors(model, DEVICE, data_loader, saveAs = None):
 
                 imagesOnDevice = batch[0].to(DEVICE)
                 labels = batch[1]
-
-
-                #model.eval()  # Set the model to evaluation mode
+                
                 latentSpaceTensor = model.encoder(imagesOnDevice)
 
-                latentSpaceArray = latentSpaceTensor.cpu().numpy()
 
-                nLatendSpaceVectors = np.shape(latentSpaceArray)[0]
-
-                latentSpaceList = [latentSpaceArray[i,:] for i in range(0, nLatendSpaceVectors ) ]
-
-                latentSpaceVectors.extend(latentSpaceList)
-
-                labelsArray = labels.cpu().numpy()
-
-                label_n_dimensions = len( np.shape(labelsArray))
-
-                labelTempList = np.split(labelsArray,nLatendSpaceVectors,axis=0)
-                # in case we have labels that are multidimensional, we don't was a list 2d arrays
-                if label_n_dimensions > 1: labelTempList = [ x[0] for x in labelTempList ]
-
-                labelList.extend(labelTempList)
+                _ = extendListWithUnpackedTensor(latentSpaceVectors,latentSpaceTensor)
+                _ = extendListWithUnpackedTensor(labelList,labels)
 
                 #if len(latentSpaceVectors) > 10000: break
-
-
 
 
     if saveAs is not None:
@@ -57,7 +52,7 @@ def getLatentSpaceVectors(model, DEVICE, data_loader, saveAs = None):
         np.save( saveAs+"_latentSpaveVectors.npy", np.asarray(latentSpaceVectors))
         np.save( saveAs+"_labels.npy"            , np.asarray(labelList))
 
-    return     latentSpaceVectors , labelList
+    return latentSpaceVectors , labelList
 
 def plotLatentSpaceVectors(latentSpaceVectors, nClusters = None, doShow = True):
 
