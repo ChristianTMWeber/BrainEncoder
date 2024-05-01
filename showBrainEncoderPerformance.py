@@ -1,11 +1,9 @@
 import torch
-import torchvision
 
 import BrainEncoder.BrainEncoder as BrainEncoder
 
 from BrainEncoder.ImageSubvolumeDataset import ImageSubvolumeDataset
 
-from trainBrainEncoder import collate_array
 
 import matplotlib.pyplot as plt
 
@@ -80,7 +78,7 @@ if __name__ == "__main__":
     dataset = ImageSubvolumeDataset("NeuNBrainSegment_compressed.tiff", subvolumeSize = subvolumeSize)
 
     data_loader = torch.utils.data.DataLoader(dataset, batch_size= config["batchSize"], 
-                                                shuffle=False, collate_fn=collate_array)
+                                                shuffle=False, collate_fn=ImageSubvolumeDataset.collate_array)
     
     # Load one batch of test images
     dataiter = iter(data_loader)

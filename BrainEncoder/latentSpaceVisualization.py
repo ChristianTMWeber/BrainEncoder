@@ -103,6 +103,12 @@ if __name__ == "__main__":
 
 
 
+    inputModel = "../BrainEncoder_LD256.pth"
+
+    import BrainEncoder as BrainEncoder
+    from ImageSubvolumeDataset import ImageSubvolumeDataset
+
+
     # Checking is CUDA available on current machine
     DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Project running on device: ", DEVICE)
@@ -121,7 +127,7 @@ if __name__ == "__main__":
     dataset = ImageSubvolumeDataset("../NeuNBrainSegment_compressed.tiff", subvolumeSize = subvolumeSize)
 
     data_loader = torch.utils.data.DataLoader(dataset, batch_size= config["batchSize"], 
-                                                shuffle=False, collate_fn=collate_array)
+                                              shuffle=False, collate_fn=dataset.collate_array)
     
     latentSpaceVectors , labelList = getLatentSpaceVectors(model, DEVICE, data_loader)
 

@@ -1,10 +1,5 @@
 import torch
 
-
-
-import torchvision # for handling input data
-from torchvision import transforms # to manipulate input data
-
 # torchsummary for easy checking and debugging
 from torchinfo import summary
 
@@ -43,31 +38,6 @@ def train(model, dataloader, criterion, optimizer,scaler):
 
     return train_loss
 
-def collate_array(batch):
-
-    def processArray(myArray):
-
-        process = transforms.Compose([
-            transforms.ToTensor(), 
-            #transforms.Pad(2)
-            ])
-
-        return process(myArray)
-
-    tensorList = [processArray(data[0]) for data in batch]
-
-
-    imageBatchTensor = torch.stack(tensorList)  # Stacks along new axis, preserving 3D shape
-    imageBatchTensor = imageBatchTensor.unsqueeze(1)  # Add channel dimension if needed
-
-    #imageBatchTensor = torch.concat(tensorList).unsqueeze(1) # should have size [batchSize,1,imageXDim, imageYDim]
-
-    # labels, note that we should convert the labels to LongTensor
-    labelTensor = torch.LongTensor([data[1] for data in batch])
-
-    return imageBatchTensor, labelTensor
-
-
 if __name__ == "__main__":
 
     import BrainEncoder.BrainEncoder as BrainEncoder
@@ -90,12 +60,12 @@ if __name__ == "__main__":
     # Create a dataset from a folder containing images
 
     subvolumeSize = 32
-    latentSpaceSize = 2048
+    latentSpaceSize = 2
 
     dataset = ImageSubvolumeDataset("NeuNBrainSegment_compressed.tiff", subvolumeSize = subvolumeSize)
 
     train_loader = torch.utils.data.DataLoader(dataset, batch_size= config["batchSize"], 
-                                                shuffle=True, collate_fn=collate_array)
+                                                shuffle=True, collate_fn=dataset.collate_array)
 
 
     model = BrainEncoder.AutoEncoder(latentSpaceSize = latentSpaceSize).to(DEVICE)

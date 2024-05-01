@@ -1,5 +1,7 @@
-#import torch
+import torch
 from torch.utils.data import Dataset
+from torchvision import transforms # to manipulate input data
+
 
 from tifffile import imread
 import os
@@ -86,6 +88,39 @@ class ImageSubvolumeDataset(Dataset):
 
         return sliceList
     
+    # use 'collate_array' as 'collate_fn' argument 
+    # when using the 'ImageSubvolumeDataset' as input to the 
+    # torch.utils.data.DataLoader method
+    #
+    # i.e. 
+    #   dataset = ImageSubvolumeDataset("NeuNBrainSegment_compressed.tiff", subvolumeSize = subvolumeSize)
+    #
+    #   torch.utils.data.DataLoader(dataset, batch_size= config["batchSize"] , collate_fn=collate_array)
+    #
+    def collate_array(self,batch):
+
+        def processArray(myArray):
+
+            process = transforms.Compose([
+                transforms.ToTensor(), 
+                #transforms.Pad(2)
+                ])
+
+            return process(myArray)
+
+        tensorList = [processArray(data[0]) for data in batch]
+
+
+        imageBatchTensor = torch.stack(tensorList)  # Stacks along new axis, preserving 3D shape
+        imageBatchTensor = imageBatchTensor.unsqueeze(1)  # Add channel dimension if needed
+
+        #imageBatchTensor = torch.concat(tensorList).unsqueeze(1) # should have size [batchSize,1,imageXDim, imageYDim]
+
+        # labels, note that we should convert the labels to LongTensor
+        labelTensor = torch.LongTensor([data[1] for data in batch])
+
+        return imageBatchTensor, labelTensor
+
 
 if __name__ == "__main__":
 
