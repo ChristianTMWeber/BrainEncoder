@@ -9,7 +9,7 @@ import os
 import numpy as np
 
 class ImageSubvolumeDataset(Dataset):
-    def __init__(self, imageFilePath : "str", subvolumeSize = 50,  
+    def __init__(self, imageFilePath : "str", subvolumeSize = 32,  
         annotations_file = None, transform=None, target_transform=None):
         
         if annotations_file is not None: self.img_labels = pd.read_csv(annotations_file)
@@ -37,33 +37,16 @@ class ImageSubvolumeDataset(Dataset):
 
     def __getitem__(self, idx):
 
-        #sliceList = self.subvolumeSlices[idx]
 
         if not isinstance(idx,slice): idx = slice(idx,idx+1)
         
         subvolumeImages = [ self.image[imgSlice] for imgSlice in self.subvolumeSlices[idx] ]
         
-        #subvolumeImages = [np.average(image,2) for image in subvolumeImages] # collapse subvolume image to a 2d one
-
-        #subvolumeImages = self.image[self.subvolumeSlices[idx]]
-
-        #subvolumeImages = []
-        #for subvolumeSlice in self.defineSubvolumes():
-        #    subvolume = self.image[subvolumeSlice]
-        #    subvolumeImages.append(subvolume)
-
-
 
         #subvolumeImage = self.image(self.defineSubvolumes())
-        label = [0]*len(subvolumeImages)
+        label = [0]*len(subvolumeImages) # all labels are 0 for now
 
-        #img_path = os.path.join(self.img_dir, self.img_labels.iloc[idx, 0])
-        #image = read_image(img_path)
-        #label = self.img_labels.iloc[idx, 1]
-        #if self.transform:
-        #    image = self.transform(image)
-        #if self.target_transform:
-        #    label = self.target_transform(label)
+
         if len(subvolumeImages)==1:  return subvolumeImages[0], label[0]
         return subvolumeImages, label
     
