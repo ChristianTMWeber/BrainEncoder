@@ -2,6 +2,9 @@
 import torch
 from torch import nn
 
+# torchsummary for easy checking and debugging
+from torchinfo import summary
+
 import numpy as np
 
 # Neural Network Model parameters
@@ -10,7 +13,7 @@ nLayers = 3
 kernelSizes = [3, 3, 3]
 nChannels = [32, 64, 128]
 kernelStrides = [2, 2, 2]
-latendSpaceDim = 8192#2048
+latendSpaceDim = 8192
 
 inputChannelsize = 1 # for now we presume only 1 color channel
 
@@ -138,11 +141,8 @@ class AutoEncoder(nn.Module):
 
 if __name__ == "__main__":
 
-    # torchsummary for easy checking and debugging
-    from torchinfo import summary
 
     testAutoEncoder = AutoEncoder()
-
 
     print(summary(testAutoEncoder))
 
