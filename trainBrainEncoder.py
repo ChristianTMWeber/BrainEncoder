@@ -60,7 +60,7 @@ if __name__ == "__main__":
     # Create a dataset from a folder containing images
 
     subvolumeSize = 32
-    latentSpaceSize = 2
+    latentSpaceSize = 256
 
     dataset = ImageSubvolumeDataset("NeuNBrainSegment_compressed.tiff", subvolumeSize = subvolumeSize)
 

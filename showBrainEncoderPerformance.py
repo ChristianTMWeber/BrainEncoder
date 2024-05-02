@@ -52,7 +52,7 @@ def plotTensor( inTensor, outTensor, outputFileName = None, doShow = True):
 
 if __name__ == "__main__":
 
-    inputModel = "BrainEncoder_LD1024.pth"
+    inputModel = "BrainEncoder_LD256.pth"
 
     # Checking is CUDA available on current machine
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -78,24 +78,31 @@ if __name__ == "__main__":
     dataset = ImageSubvolumeDataset("NeuNBrainSegment_compressed.tiff", subvolumeSize = subvolumeSize)
 
     data_loader = torch.utils.data.DataLoader(dataset, batch_size= config["batchSize"], 
-                                                shuffle=False, collate_fn=ImageSubvolumeDataset.collate_array)
+                                                shuffle=False, collate_fn=dataset.collate_array)
     
     # Load one batch of test images
     dataiter = iter(data_loader)
 
-    images, _ = next(dataiter)
-    imagesOnDevice = images.to(DEVICE)
-    
+    counter = -1
+    for x in range(0,2000):
+        counter +=1
+        images, _ = next(dataiter)
 
-    
-    # Get reconstructed images from the autoencoder
-    with torch.no_grad():
-        with torch.cuda.amp.autocast():
-            model.eval()  # Set the model to evaluation mode
-            outputs = model(imagesOnDevice)
+        # skipt sets of input images that are in aggregate too empty
+        if np.sum(images.sum(dim=[1,2,3,4]).numpy()>1) <4: continue
+        imagesOnDevice = images.to(DEVICE)
+        print(counter)
+        
+
+        
+        # Get reconstructed images from the autoencoder
+        with torch.no_grad():
+            with torch.cuda.amp.autocast():
+                #model.eval()  # Set the model to evaluation mode
+                outputs = model(imagesOnDevice)
 
 
-    plotTensor( imagesOnDevice, outputs)
+        plotTensor( imagesOnDevice, outputs)
 
 
     print("done!")
