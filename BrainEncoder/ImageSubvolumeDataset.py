@@ -10,17 +10,20 @@ import numpy as np
 
 class ImageSubvolumeDataset(Dataset):
     def __init__(self, imageFilePath : "str", subvolumeSize = 32,  
+        minimumFractionalFill : "float" = None , 
+        # minimum fraction of non-zero pixels in a subvolume for it to be included in the dataset
         annotations_file = None, transform=None, target_transform=None):
         
         if annotations_file is not None: self.img_labels = pd.read_csv(annotations_file)
         else: self.img_labels= None
         
         self.imageFilePath = os.path.abspath(imageFilePath)
-        self.image = imread(self.imageFilePath).astype(np.float16)
+        self.imageNPArray = imread(self.imageFilePath).astype(np.float16)
 
         self.subvolumeSize = subvolumeSize # assume for now same size in each direction
+        self.minimumFractionalFill = minimumFractionalFill
 
-        nSegmentsPerAxis = [ len(self.segmentBoundaries(imageLength, self.subvolumeSize)) for imageLength in np.shape(self.image)  ]
+        nSegmentsPerAxis = [ len(self.segmentBoundaries(imageLength, self.subvolumeSize)) for imageLength in np.shape(self.imageNPArray)  ]
 
         self.nSubvolumes = np.prod( nSegmentsPerAxis )
 
@@ -30,20 +33,20 @@ class ImageSubvolumeDataset(Dataset):
         self.target_transform = target_transform
 
 
-        self.subvolumeSlices = self.defineSubvolumes()
+        self.subvolumeSlices = self.defineSubvolumes(self.subvolumeSize,self.minimumFractionalFill)
 
     def __len__(self):
-        return self.nSubvolumes
+        return len(self.subvolumeSlices)
 
     def __getitem__(self, idx):
 
 
         if not isinstance(idx,slice): idx = slice(idx,idx+1)
         
-        subvolumeImages = [ self.image[imgSlice] for imgSlice in self.subvolumeSlices[idx] ]
+        subvolumeImages = [ self.imageNPArray[imgSlice] for imgSlice in self.subvolumeSlices[idx] ]
         
 
-        #subvolumeImage = self.image(self.defineSubvolumes())
+        #subvolumeImage = self.imageNPArray(self.defineSubvolumes())
         label = [0]*len(subvolumeImages) # all labels are 0 for now
 
 
@@ -54,18 +57,31 @@ class ImageSubvolumeDataset(Dataset):
         return [x for x in range(0,imageLength-segmentSize+1,segmentSize)]
     
 
-    def defineSubvolumes(self): #presume for now that we have a 3d image
-        imageDimensions = np.shape(self.image)
+    def defineSubvolumes(self,subvolumeSize,minimumFractionalFill): #presume for now that we have a 3d image
+        
+        def segmentIsTooEmpty(segment: "np.array", emptyThreshold = 0.001) -> "bool":
+
+            # if we don't set an empty threshold, the segment is not too empty
+            if emptyThreshold is None: return False 
+
+            fractionalFill = np.sum( segment > 0 ) / np.prod(np.shape(segment))
+
+            return fractionalFill < emptyThreshold
+        
+
+        imageDimensions = np.shape(self.imageNPArray)
 
         sliceList = []
 
-        for xBoundary in self.segmentBoundaries(imageDimensions[0], self.subvolumeSize):
-            for yBoundary in self.segmentBoundaries(imageDimensions[1], self.subvolumeSize):
-                for zBoundary in self.segmentBoundaries(imageDimensions[2], self.subvolumeSize):
+        for xBoundary in self.segmentBoundaries(imageDimensions[0], subvolumeSize):
+            for yBoundary in self.segmentBoundaries(imageDimensions[1], subvolumeSize):
+                for zBoundary in self.segmentBoundaries(imageDimensions[2], subvolumeSize):
 
-                    sliceTuple = tuple( [slice(xBoundary,xBoundary+self.subvolumeSize),
-                                         slice(yBoundary,yBoundary+self.subvolumeSize),
-                                         slice(zBoundary,zBoundary+self.subvolumeSize)])
+                    sliceTuple = tuple( [slice(xBoundary,xBoundary+subvolumeSize),
+                                         slice(yBoundary,yBoundary+subvolumeSize),
+                                         slice(zBoundary,zBoundary+subvolumeSize)])
+                    
+                    if segmentIsTooEmpty(self.imageNPArray[sliceTuple], emptyThreshold = minimumFractionalFill): continue
                     
                     sliceList.append(sliceTuple)
 
@@ -108,7 +124,9 @@ class ImageSubvolumeDataset(Dataset):
 if __name__ == "__main__":
 
 
-    imageDataset = ImageSubvolumeDataset("../NeuNBrainSegment_compressed.tiff")
+    imageDataset = ImageSubvolumeDataset("../NeuNBrainSegment_compressed.tiff", minimumFractionalFill= 1E-4 )
+
+    print( "There are %i elements in the dataset" %len(imageDataset) )
 
     aSubvolume, subvolumeLabel = imageDataset[0]
 

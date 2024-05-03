@@ -75,7 +75,9 @@ if __name__ == "__main__":
 
     subvolumeSize = 32
 
-    dataset = ImageSubvolumeDataset("NeuNBrainSegment_compressed.tiff", subvolumeSize = subvolumeSize)
+    dataset = ImageSubvolumeDataset("NeuNBrainSegment_compressed.tiff", 
+                                    subvolumeSize = subvolumeSize,
+                                    minimumFractionalFill= 1E-4)
 
     data_loader = torch.utils.data.DataLoader(dataset, batch_size= config["batchSize"], 
                                                 shuffle=False, collate_fn=dataset.collate_array)
@@ -83,17 +85,10 @@ if __name__ == "__main__":
     # Load one batch of test images
     dataiter = iter(data_loader)
 
-    counter = -1
-    for x in range(0,2000):
-        counter +=1
+    for x in range(0, int(len(dataset)/config["batchSize"])):
         images, _ = next(dataiter)
 
-        # skipt sets of input images that are in aggregate too empty
-        if np.sum(images.sum(dim=[1,2,3,4]).numpy()>1) <4: continue
         imagesOnDevice = images.to(DEVICE)
-        print(counter)
-        
-
         
         # Get reconstructed images from the autoencoder
         with torch.no_grad():
