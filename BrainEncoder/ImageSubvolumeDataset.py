@@ -12,7 +12,7 @@ import time
 # for monitoring memory usage
 import tracemalloc
 
-from tiffStackArray import tiffStackArray # use this to load the stack of tiff files
+from .tiffStackArray import tiffStackArray # use this to load the stack of tiff files
 
 class ImageSubvolumeDataset(Dataset):
     def __init__(self, imageFilePath : "str", subvolumeSize = 32,  
@@ -43,7 +43,7 @@ class ImageSubvolumeDataset(Dataset):
         self.imageNPArray = tiffStackArray(self.imageFilePath)
 
         # commit part or all of the tiff information to memory
-        if isinstance(regionOfRelevance,slice):
+        if isinstance(regionOfRelevance,slice) or all([isinstance(x,slice) for x in regionOfRelevance]):
             startime = time.time()
             self.imageNPArray = self.imageNPArray[ regionOfRelevance ]
             print("Array copy time: %i s" % (time.time()-startime))
@@ -150,7 +150,7 @@ class ImageSubvolumeDataset(Dataset):
                 #transforms.Pad(2)
                 ])
 
-            return process(myArray)
+            return process(myArray.astype(np.single))
 
         tensorList = [processArray(data[0]) for data in batch]
 

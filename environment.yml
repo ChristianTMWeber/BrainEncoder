@@ -5,7 +5,7 @@ channels:
   - pytorch
   - nvidia 
 dependencies:
-  - python=3.9
+  - python>=3.10
   - pytorch=*=*cuda* #=1.12.1
   - torchvision #=0.13.1
   - cudatoolkit=11.8 #=12.4  # Remove or modify if not using an NVIDIA GPU
@@ -19,7 +19,9 @@ dependencies:
   - scikit-learn
   - pandas
   - seaborn
-
+  - rasterio
+  - zarr
+  - psutil
   #- pip
   #- pip:
   #    - torchinfo  # Optional, for model summaries
