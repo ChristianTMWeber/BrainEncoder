@@ -12,7 +12,10 @@ import time
 # for monitoring memory usage
 import tracemalloc
 
-from .tiffStackArray import tiffStackArray # use this to load the stack of tiff files
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from tiffStackArray import tiffStackArray # use this to load the stack of tiff files
 
 class ImageSubvolumeDataset(Dataset):
     def __init__(self, imageFilePath : "str", subvolumeSize = 32,  
@@ -63,6 +66,7 @@ class ImageSubvolumeDataset(Dataset):
         print(f"Current memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB; Diff = {(peak - current) / 10**6}MB")
 
         self.nSubvolumes = len(self.subvolumeSlices)
+        print("There are %i subvolumes" %self.nSubvolumes )
         self.potentialSubvolumes = np.prod(np.asarray(self.imageNPArray.shape)//32)
 
         self.minimumFractionalFill_Efficiency = self.nSubvolumes / self.potentialSubvolumes

@@ -15,7 +15,9 @@ __pycache__/*
 # ignore for now all the data we might train on
 *.tiff
 
+# ignore plots that we might create
+*.png
 
-
-
+# ignore development environment
+.vscode/*
 
