@@ -54,14 +54,17 @@ def getLatentSpaceVectors(model, DEVICE, data_loader, saveAs = None):
 
     return latentSpaceVectors , labelList
 
-def plotLatentSpaceVectors(latentSpaceVectors, nClusters = None, doShow = True):
+def plotLatentSpaceVectors(latentSpaceVectors, nClusters = None, doShow = True, outputFileName = None, TSNE_embedding_store = []):
 
     n_components = 2
     TSNE = manifold.TSNE(n_components)
 
     latentSpaceArray = np.asarray(latentSpaceVectors)
 
-    tsne_embedding = TSNE.fit_transform(latentSpaceArray)
+    if len(TSNE_embedding_store) == 0: 
+        tsne_embedding = TSNE.fit_transform(latentSpaceArray)
+        TSNE_embedding_store.append(tsne_embedding) # cache the embedding, implement a better way later
+    else:tsne_embedding=TSNE_embedding_store[0]
 
     dataDictForPandas = {'TSNE Variable 1': tsne_embedding[:,0],
                          'TSNE Variable 2': tsne_embedding[:,1],
@@ -90,6 +93,7 @@ def plotLatentSpaceVectors(latentSpaceVectors, nClusters = None, doShow = True):
     sns.scatterplot(x='TSNE Variable 1', y='TSNE Variable 2', 
                     hue=scatterHue, data=tsne_result_df, ax=ax,s=120)
     if doShow: plt.show()
+    if outputFileName is not None: plt.savefig(outputFileName)
 
     return None
 
@@ -97,10 +101,14 @@ def plotLatentSpaceVectors(latentSpaceVectors, nClusters = None, doShow = True):
 
 if __name__ == "__main__":
     import re
+    import os
+
+    script_path = os.path.dirname(os.path.abspath(__file__))
 
 
 
-    inputModel = "../BrainEncoder_LD256.pth"
+
+    inputModel = os.path.join(script_path,"../BrainEncoder_LD256.pth")
 
     import BrainEncoder as BrainEncoder
     from ImageSubvolumeDataset import ImageSubvolumeDataset
@@ -113,7 +121,7 @@ if __name__ == "__main__":
     # configurations for the task
     config = {"batchSize": 10}
 
-    latentSpaceDimensionality = int(re.search("\d+",inputModel).group())
+    latentSpaceDimensionality = int(re.search("(?<=LD)\d+",inputModel).group())
 
     model = BrainEncoder.AutoEncoder( latentSpaceSize=latentSpaceDimensionality).to(DEVICE)
 
@@ -128,7 +136,12 @@ if __name__ == "__main__":
     
     latentSpaceVectors , labelList = getLatentSpaceVectors(model, DEVICE, data_loader)
 
-    plotLatentSpaceVectors(latentSpaceVectors, nClusters = 3)
+    for nClusters in range(3,11):
+
+        plotName = "LatenSpaceVisualization_LD%i_ncluster_%s.png" %(latentSpaceDimensionality, str(nClusters).zfill(2))
+
+        plotLatentSpaceVectors(latentSpaceVectors, nClusters = nClusters, outputFileName = plotName)
+
 
     print("Done!")
     
