@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import time
+import scipy.ndimage
 
 # for monitoring memory usage
 import tracemalloc
@@ -20,7 +21,9 @@ from tiffStackArray import tiffStackArray # use this to load the stack of tiff f
 class ImageSubvolumeDataset(Dataset):
     def __init__(self, imageFilePath : "str", subvolumeSize = 32,  
         minimumFractionalFill : "float" = None , 
-        regionOfRelevance : "tuple(slice)" = False ):
+        regionOfRelevance : "tuple(slice)" = False,
+        batchSize = 64, randomBatches = False ,
+        nAugmentedSamples = 5):
         # minimum fraction of non-zero pixels in a subvolume for it to be 
         #   included in the dataset
         # regionOfRelevance - if we don't want to consider the full information / all 
@@ -71,8 +74,24 @@ class ImageSubvolumeDataset(Dataset):
 
         self.minimumFractionalFill_Efficiency = self.nSubvolumes / self.potentialSubvolumes
 
-        return None
+        self.indexRange = range(0,max(np.shape(self.imageNPArray))) # use this to convert slices to intervals
 
+        self.batchSize = batchSize
+        self.randomBatches = randomBatches
+
+        self.nAugmentedSamples = nAugmentedSamples
+
+        self.nYieldBatches = (self.nSubvolumes-nAugmentedSamples)//self.batchSize
+
+        self.randomIndices = np.random.permutation(self.nSubvolumes)
+
+        if self.randomBatches: self.indexMapper = lambda x: self.randomIndices[x]
+        else: self.indexMapper = lambda x: x
+
+        return None
+    
+
+    
 
     def __len__(self):
         return len(self.subvolumeSlices)
@@ -82,15 +101,35 @@ class ImageSubvolumeDataset(Dataset):
 
         if not isinstance(idx,slice): idx = slice(idx,idx+1)
         
-        subvolumeImages = [ self.imageNPArray[imgSlice] for imgSlice in self.subvolumeSlices[idx] ]
-        
 
-        #subvolumeImage = self.imageNPArray(self.defineSubvolumes())
-        label = [0]*len(subvolumeImages) # all labels are 0 for now
+        [self.indexRange[imSlice[0]][0] for imSlice in [imgSliceTuple for imgSliceTuple in self.subvolumeSlices[idx]]]
+
+        # each tuple in this list comproses three slice objects (sliceZ, sliceY, sliceX)
+        # sliceZ selects the array elements of the given subvolume along Z
+        # sliceY, sliceX do the same along Y and X
+        list_of_ZYXsliceTuples = [imSlice for imSlice in  [imgSliceTuple for imgSliceTuple in self.subvolumeSlices[idx]]]
+
+        subvolumeImages = [ self.imageNPArray[imgSliceTuple] for imgSliceTuple in list_of_ZYXsliceTuples ]
+
+        subvolumeImagesNormalized = []
+        # normalize the subvolume
+        for image in subvolumeImages:
+
+            image = image - np.min(image)
+            image = image / (np.max(image) + 1E-5) * 100
+
+            subvolumeImagesNormalized.append(image)
+            
+        subvolumeImages = subvolumeImagesNormalized
 
 
-        if len(subvolumeImages)==1:  return subvolumeImages[0], label[0]
-        return subvolumeImages, label
+        subvolumeLabels = [] # each label is a tuple of z,y, and x coordinates
+        for imgSliceTuple in list_of_ZYXsliceTuples: # imgSliceTuple is a tuple of slices: (sliceZ, sliceY, sliceX)
+            subvolumeLabels.append( tuple( [self.indexRange[imSlice][0] for imSlice in imgSliceTuple ] ) )
+
+        # if only one element was requested, we don't want to return a list of that single subvolume / label
+        if len(subvolumeImages)==1:  return subvolumeImages[0], subvolumeLabels[0]
+        return subvolumeImages, subvolumeLabels
 
 
     def segmentBoundaries(self, imageLength, segmentSize):
@@ -110,7 +149,8 @@ class ImageSubvolumeDataset(Dataset):
 
         sliceList = []
         
-        count = 0
+
+        import subprocess
 
         for zBoundary in self.segmentBoundaries(imageDimensions[0], subvolumeSize):
 
@@ -119,6 +159,11 @@ class ImageSubvolumeDataset(Dataset):
             # this zSlice is loaded directly into memory, and thus can loop over 
             # all of the y and x boundaries quickly
             zSlice = self.imageNPArray[slice(zBoundary,zBoundary+subvolumeSize)]
+            print("zBoundary = %i" %zBoundary)
+
+            command = "lsof -u chweber 2>/dev/null | wc -l"
+            result = subprocess.run(command, shell=True, text=True, stdout=subprocess.PIPE)
+            print(result.stdout.strip())
 
             for yBoundary in self.segmentBoundaries(imageDimensions[1], subvolumeSize):
                 for xBoundary in self.segmentBoundaries(imageDimensions[2], subvolumeSize):
@@ -170,20 +215,105 @@ class ImageSubvolumeDataset(Dataset):
         return imageBatchTensor, labelTensor
 
 
+    def transformImage(self, image, transformIndex):
+
+        transformIndex = transformIndex % 10
+        
+        if transformIndex < 8:
+
+            rotationAxes = np.random.choice(range(0,np.ndim(image)), 2, replace=False)
+            rotationAngle = 90*np.random.randint(1,4)
+
+            transformedImage = scipy.ndimage.rotate(image, angle=rotationAngle, axes=rotationAxes, reshape=True)
+
+
+        else: 
+            # flip one axis of the image
+            permutation = np.random.permutation((slice(None,None,-1), slice(None),slice(None)))
+
+            transformedImage = image[tuple(permutation)]
+            
+        return transformedImage
+
+
+    # I want to yield subsets of the dataset, where each subset is a batch of subvolumes
+    def __iter__(self):
+
+
+        # lambda function that returns input data for a given index
+
+        nNewSamplesPerBatch = self.batchSize - self.nAugmentedSamples
+
+
+        for batchNr in range(0, self.nSubvolumes-nNewSamplesPerBatch, nNewSamplesPerBatch):
+
+
+            sliceIndices = [self.indexMapper(x) for x in range(batchNr,batchNr+nNewSamplesPerBatch)]
+            sliceList = [ self.subvolumeSlices[sliceIndex] for sliceIndex in sliceIndices]
+
+            imageList = [self.imageNPArray[imgSlice] for imgSlice in sliceList]
+
+            # augment the data
+            # select x out of n without replacement
+            augmentedIndices = np.random.choice(nNewSamplesPerBatch, self.nAugmentedSamples, replace=True)
+
+            augmentedImageList = []
+            augmentedSliceList = []
+
+            for augIndex in augmentedIndices:
+                #imgSlice = sliceList[augIndex]
+                imgSlice = sliceList[0]
+
+                image = self.imageNPArray[imgSlice]
+
+                #random integer 
+                augmentedImageList.append(self.transformImage(image, np.random.randint(0,255)))
+                augmentedSliceList.append(imgSlice)
+            #sliceList = [    self.subvolumeSlices ]
+
+            imageList.extend(augmentedImageList)
+            sliceList.extend(augmentedSliceList)
+
+            subvolumeLabels = [] # each label is a tuple of z,y, and x coordinates
+            for imgSliceTuple in sliceList: # imgSliceTuple is a tuple of slices: (sliceZ, sliceY, sliceX)
+                subvolumeLabels.append( tuple( [self.indexRange[imSlice][0] for imSlice in imgSliceTuple ] ) )
+
+            imageAndLabelList = [ (image,label) for image,label in zip(imageList,subvolumeLabels)]
+
+            # turn the list of arrays and slices into tensors
+            yield self.collate_array(imageAndLabelList)
+
+
+
 if __name__ == "__main__":
 
-    imageFilePath = "../NeuNBrainSegment_compressed.tiff"
-    #imageFilePath = "/media/ssdshare1/general/computational_projects/brain_segmentation/DaeHee_NeuN_data/20190621_11_58_27_349_fullbrain_488LP30_561LP140_642LP100/Ex_2_Em_2_destriped_stitched_master"
+    script_path = os.path.dirname(os.path.abspath(__file__))
+
+    #imageFilePath = os.path.join(script_path,"../NeuNBrainSegment_compressed.tiff")
+    imageFilePath = "/media/ssdshare1/general/computational_projects/brain_segmentation/DaeHee_NeuN_data/20190621_11_58_27_349_fullbrain_488LP30_561LP140_642LP100/Ex_2_Em_2_destriped_stitched_master"
 
 
-    imageDataset = ImageSubvolumeDataset(imageFilePath, minimumFractionalFill= 1E-4 )
+    imageDataset = ImageSubvolumeDataset(imageFilePath, minimumFractionalFill= 1E-4,
+                                        regionOfRelevance=(slice(1000,1064), slice(2000,2000+3000),slice(950,900+2700)),
+                                        batchSize = 64, randomBatches = True ,
+                                        nAugmentedSamples = 5 )
     #imageDataset = ImageSubvolumeDataset(imageFilePath, minimumFractionalFill= 1E-4 , regionOfRelevance=slice(None))
 
     print( "There are %i elements in the dataset" %len(imageDataset) )
 
+    data = imageDataset[0:3]
+
+
     aSubvolume, subvolumeLabel = imageDataset[0]
 
-    data = imageDataset[0:3]
+    for batch in imageDataset:
+        #print("Batch")
+        #break
+        pass
+
+
+    #labelA   =  data[1][0]
+    #labelB  =  data[1][1]
 
     print("All Done!")
 
