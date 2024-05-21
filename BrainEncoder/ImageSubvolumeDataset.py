@@ -2,6 +2,8 @@ import torch
 from torch.utils.data import Dataset
 from torchvision import transforms # to manipulate input data
 
+import ray # for parallel processing
+
 import os
 
 import numpy as np
@@ -23,7 +25,7 @@ class ImageSubvolumeDataset(Dataset):
         minimumFractionalFill : "float" = None , 
         regionOfRelevance : "tuple(slice)" = False,
         batchSize = 64, randomBatches = False ,
-        nAugmentedSamples = 5):
+        nAugmentedSamples : int = 5, nThreads : int = 4):
         # minimum fraction of non-zero pixels in a subvolume for it to be 
         #   included in the dataset
         # regionOfRelevance - if we don't want to consider the full information / all 
@@ -39,6 +41,13 @@ class ImageSubvolumeDataset(Dataset):
         # dimension 1 - is along Y
         # dimension 2 - is along X
         # pass regionOfRelevance = slice(None) to copy the full tiff information into memory
+        #
+        #
+        #   nThreads
+        # Part of the image augmentation procedure involves rotation of the output subvolumes
+        # To speed this up we use multiple threads via the 'ray' library to parallelize the process
+        # nThreads specifies the number of threads to use
+
         
         self.img_labels= None
         
@@ -49,7 +58,7 @@ class ImageSubvolumeDataset(Dataset):
         self.imageNPArray = tiffStackArray(self.imageFilePath)
 
         # commit part or all of the tiff information to memory
-        if isinstance(regionOfRelevance,slice) or all([isinstance(x,slice) for x in regionOfRelevance]):
+        if bool(regionOfRelevance) and (isinstance(regionOfRelevance,slice) or all([isinstance(x,slice) for x in regionOfRelevance])):
             startime = time.time()
             self.imageNPArray = self.imageNPArray[ regionOfRelevance ]
             print("Array copy time: %i s" % (time.time()-startime))
@@ -81,6 +90,8 @@ class ImageSubvolumeDataset(Dataset):
 
         self.nAugmentedSamples = nAugmentedSamples
 
+        self.shape = np.shape(self.imageNPArray)
+
         self.nYieldBatches = (self.nSubvolumes-nAugmentedSamples)//self.batchSize
 
         self.randomIndices = np.random.permutation(self.nSubvolumes)
@@ -88,10 +99,17 @@ class ImageSubvolumeDataset(Dataset):
         if self.randomBatches: self.indexMapper = lambda x: self.randomIndices[x]
         else: self.indexMapper = lambda x: x
 
+        self.nThreads = nThreads
+        ray.init(num_cpus=nThreads) # Initialize Ray with some numberof workers
+
+
         return None
     
 
-    
+    def __del__(self):
+        # let's make sure we shut down the ray workers when we're done
+        ray.shutdown()
+        return None
 
     def __len__(self):
         return len(self.subvolumeSlices)
@@ -142,7 +160,7 @@ class ImageSubvolumeDataset(Dataset):
 
             fractionalFill = np.sum( segment > 0 ) / np.prod(np.shape(segment))
 
-            return fractionalFill < emptyThreshold
+            return (fractionalFill < emptyThreshold) or (np.std(segment)<0.005)
         
 
         imageDimensions = np.shape(self.imageNPArray)
@@ -213,28 +231,84 @@ class ImageSubvolumeDataset(Dataset):
         labelTensor = torch.LongTensor([data[1] for data in batch])
 
         return imageBatchTensor, labelTensor
+    
+
+    def offsetSliceTuple(self,sliceTuple : "tuple(slice)", offsetTuple : "tuple(int)"):
+        if isinstance(offsetTuple,int):
+            offsetTuple = (offsetTuple,offsetTuple,offsetTuple)
 
 
-    def transformImage(self, image, transformIndex):
+        newSliceList = []
 
-        transformIndex = transformIndex % 10
+        for index, (mySlice , offset) in enumerate(zip(sliceTuple,offsetTuple)):
+
+            leftBoundOnNewSliceStart = max(mySlice.start - offset, 0)
+            rightBoundOnNewSliceStart = min(mySlice.start + offset, self.shape[index] - self.subvolumeSize)
+
+            newSliceStart = np.random.randint(leftBoundOnNewSliceStart, rightBoundOnNewSliceStart+1)
+
+            newSlice = slice(newSliceStart , newSliceStart + self.subvolumeSize)
+
+            newSliceList.append(newSlice)
+
+        return tuple(newSliceList)
+
+    @ray.remote # this decorator tells Ray to parallelize this function
+    def transformImage(image):
+
+        transformIndex = np.random.randint(0,11)
+
         
         if transformIndex < 8:
 
             rotationAxes = np.random.choice(range(0,np.ndim(image)), 2, replace=False)
             rotationAngle = 90*np.random.randint(1,4)
 
-            transformedImage = scipy.ndimage.rotate(image, angle=rotationAngle, axes=rotationAxes, reshape=True)
+            transformedImage = scipy.ndimage.rotate(image, angle=rotationAngle, axes=rotationAxes, reshape=False)
 
 
         else: 
             # flip one axis of the image
-            permutation = np.random.permutation((slice(None,None,-1), slice(None),slice(None)))
+            permutation = np.random.permutation( [slice(None,None,-1), slice(None),slice(None)])
 
             transformedImage = image[tuple(permutation)]
+
+
+        rotationAngle = np.random.randint(-30,30) # between -10 and 10 degrees
+        rotationAxes = np.random.choice(range(0,np.ndim(image)), 2, replace=False)
+        transformedImage = scipy.ndimage.rotate( transformedImage, angle=rotationAngle, axes=rotationAxes, reshape=False, mode='mirror')
+        #if outputImage.shape != (32,32,32):
+        #    pass 
             
         return transformedImage
 
+    def transformImage2(self, image, transformIndex):
+
+        transformIndex = np.random.randint(0,11)
+
+        
+        if transformIndex < 8:
+
+            rotationAxes = np.random.choice(range(0,np.ndim(image)), 2, replace=False)
+            rotationAngle = 90*np.random.randint(1,4)
+
+            transformedImage = scipy.ndimage.rotate(image, angle=rotationAngle, axes=rotationAxes, reshape=False)
+
+
+        else: 
+            # flip one axis of the image
+            permutation = np.random.permutation( [slice(None,None,-1), slice(None),slice(None)])
+
+            transformedImage = image[tuple(permutation)]
+
+
+        rotationAngle = np.random.randint(-30,30) # between -10 and 10 degrees
+        rotationAxes = np.random.choice(range(0,np.ndim(image)), 2, replace=False)
+        transformedImage = scipy.ndimage.rotate( transformedImage, angle=rotationAngle, axes=rotationAxes, reshape=False, mode='mirror')
+        #if outputImage.shape != (32,32,32):
+        #    pass 
+            
+        return transformedImage
 
     # I want to yield subsets of the dataset, where each subset is a batch of subvolumes
     def __iter__(self):
@@ -254,24 +328,56 @@ class ImageSubvolumeDataset(Dataset):
             imageList = [self.imageNPArray[imgSlice] for imgSlice in sliceList]
 
             # augment the data
-            # select x out of n without replacement
+            # select x out of n with replacement
             augmentedIndices = np.random.choice(nNewSamplesPerBatch, self.nAugmentedSamples, replace=True)
+
+            sliceIndices
 
             augmentedImageList = []
             augmentedSliceList = []
+            workScheduleForRayWorkers = []
+            # we will use the original slices for the auto encoder training, but for debug purposes I wanna keep track of them
+            offsetSlices = [] 
 
-            for augIndex in augmentedIndices:
-                #imgSlice = sliceList[augIndex]
-                imgSlice = sliceList[0]
+            #startTime = time.time()
+    
+            for augCounter in range(0,self.nAugmentedSamples):
+                imgSlice = sliceList[augCounter%len(sliceIndices)]
 
-                image = self.imageNPArray[imgSlice]
+                newSlice = self.offsetSliceTuple(imgSlice, self.subvolumeSize//2)
+
+                offsetSlices.append(newSlice)
+
+
+
+                image = self.imageNPArray[newSlice]
 
                 #random integer 
-                augmentedImageList.append(self.transformImage(image, np.random.randint(0,255)))
+                #augmentedImageList.append(self.transformImage2(image, np.random.randint(0,100)))
                 augmentedSliceList.append(imgSlice)
-            #sliceList = [    self.subvolumeSlices ]
 
-            imageList.extend(augmentedImageList)
+                workScheduleForRayWorkers.append( self.transformImage.remote(image) )
+
+            #print("Time taken for serial processing: ", time.time()-startTime)
+
+            #startTime = time.time()
+            augmentedImageListFromRay = ray.get(workScheduleForRayWorkers)
+            #augmentedImageListFromRay = augmentedImageList
+            #print("Time taken for parallel processing: ", time.time()-startTime)
+
+
+            #for augIndex in augmentedIndices:
+            #    #imgSlice = sliceList[augIndex]
+            #    imgSlice = sliceList[0]
+            #
+            #    image = self.imageNPArray[imgSlice]
+            #
+            #    #random integer 
+            #    augmentedImageList.append(self.transformImage(image, np.random.randint(0,255)))
+            #    augmentedSliceList.append(imgSlice)
+            ##sliceList = [    self.subvolumeSlices ]
+
+            imageList.extend(augmentedImageListFromRay)
             sliceList.extend(augmentedSliceList)
 
             subvolumeLabels = [] # each label is a tuple of z,y, and x coordinates
@@ -295,8 +401,8 @@ if __name__ == "__main__":
 
     imageDataset = ImageSubvolumeDataset(imageFilePath, minimumFractionalFill= 1E-4,
                                         regionOfRelevance=(slice(1000,1064), slice(2000,2000+3000),slice(950,900+2700)),
-                                        batchSize = 64, randomBatches = True ,
-                                        nAugmentedSamples = 5 )
+                                        batchSize = 60, randomBatches = True ,
+                                        nAugmentedSamples = 48 )
     #imageDataset = ImageSubvolumeDataset(imageFilePath, minimumFractionalFill= 1E-4 , regionOfRelevance=slice(None))
 
     print( "There are %i elements in the dataset" %len(imageDataset) )
@@ -306,7 +412,10 @@ if __name__ == "__main__":
 
     aSubvolume, subvolumeLabel = imageDataset[0]
 
+    startTime = time.time()
+    counter = 0
     for batch in imageDataset:
+        print("Counter %i, elapsed time: %i s" %(counter, time.time()-startTime))
         #print("Batch")
         #break
         pass
