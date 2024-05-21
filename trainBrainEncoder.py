@@ -24,7 +24,7 @@ def subvolumeDistance(labelA, labelB, subvolumeSize):
     return euclidianDistance / subvolumeSize
 
 
-def train(model, dataloader, criterion, optimizer,scaler, subvolumeSize):
+def train(model, dataloader, criterion, optimizer,scaler, subvolumeSize, config):
     
     model.train()
 
@@ -34,14 +34,19 @@ def train(model, dataloader, criterion, optimizer,scaler, subvolumeSize):
     RecoLoss_ledger = 0.0
     MultiSimLoss_ledger = 0.0 # MultiSimLoss - MultiSim
 
-    MultiSimLossMultiplier = 1.E+3 
+    MultiSimLossMultiplier = 1E+1 
     # Multiply MultiSimilarityLoss with this constant
     # Otherwise one loss might be much larger than the other
     # and we end up optimizing only one of the two losses
 
     multiSimilarityLossCalculator = MultiSimilarityLoss()
 
+
+
     for i, batch in enumerate(dataloader):
+        startTime = time.time()
+
+        
 
         subvolumes = batch[0]
         batchSize= subvolumes.size(0)
@@ -52,15 +57,15 @@ def train(model, dataloader, criterion, optimizer,scaler, subvolumeSize):
 
         
 
-        similarLabelToFirstBatchElement= torch.LongTensor(
-            [subvolumeDistance(labelTensor[0], label, subvolumeSize) < maxDistanceForSameFeatures 
-             for label in labelTensor] )
+        #similarLabelToFirstBatchElement= torch.LongTensor(
+        #    [subvolumeDistance(labelTensor[0], label, subvolumeSize) < maxDistanceForSameFeatures 
+        #     for label in labelTensor] )
         
-        #locationIDList = []
-        #for tocationTuple in labelTensor:
-        #    locationIDList.append( np.sum(np.asarray(tocationTuple) * np.shape(dataloader.imageNPArray)))
-        #
-        #similarLabelToFirstBatchElement= torch.LongTensor(locationIDList)
+        locationIDList = []
+        for tocationTuple in labelTensor:
+            locationIDList.append( np.sum(np.asarray(tocationTuple) * np.shape(dataloader.imageNPArray)))
+        
+        similarLabelToFirstBatchElement= torch.LongTensor(locationIDList)
 
         
         optimizer.zero_grad()
@@ -73,10 +78,11 @@ def train(model, dataloader, criterion, optimizer,scaler, subvolumeSize):
             RecoLoss = criterion(y_recons, x)
 
 
-        latentSpaceTensorNormalized = torch.nn.functional.normalize(latentSpaceTensor,dim=1)
+        latentSpaceTensorNormalized = torch.nn.functional.normalize(latentSpaceTensor[:,0:8],dim=1)
         latentSpaceTensorNormalized = latentSpaceTensorNormalized.to(torch.float32)
 
-        MultiSimLoss = multiSimilarityLossCalculator.forward(latentSpaceTensorNormalized, similarLabelToFirstBatchElement)
+        MultiSimLoss = multiSimilarityLossCalculator.forward(latentSpaceTensorNormalized, labelTensor, 
+                                                             maxDistForPosPair=0, minDistForNegativePair=2, nUnaugmentedSamples = config["batchSize"]- config["nAugmentedSamples"])
         
         # not clear at the moment that this is the best way to normalize the MS loss by the number of positive samples
         nPositiveSamples = similarLabelToFirstBatchElement.sum().item() + 1E-5 # add small epsilon so that this can not yield NaN or Inf
@@ -85,8 +91,7 @@ def train(model, dataloader, criterion, optimizer,scaler, subvolumeSize):
 
         MultiSimLoss_normalized = MultiSimLoss/( batchSize * nPositiveSamples  )
 
-        RecoLoss_ledger += RecoLoss_normalized.item()
-        MultiSimLoss_ledger += MultiSimLoss_normalized.item() * MultiSimLossMultiplier
+
 
         commbinedNormalizedLoss = RecoLoss/(batchSize*nVoxelsInSubvolume) + \
             MultiSimLossMultiplier * MultiSimLoss/( batchSize * nPositiveSamples  )
@@ -101,13 +106,17 @@ def train(model, dataloader, criterion, optimizer,scaler, subvolumeSize):
 
         if np.isnan(commbinedNormalizedLoss.item()):
             print("Observed NaN.")
-            #import pdb; pdb.set_trace()
-            pass
-            continue
+        #    continue
+        #    #import pdb; pdb.set_trace()
+        #    #pass
 
 
+        if not np.isnan(commbinedNormalizedLoss.item()):
+            RecoLoss_ledger += RecoLoss_normalized.item()
+            MultiSimLoss_ledger += MultiSimLoss_normalized.item() * MultiSimLossMultiplier
 
-        train_loss += commbinedNormalizedLoss.item()#   RecoLoss.item()
+
+            train_loss += commbinedNormalizedLoss.item()#   RecoLoss.item()
 
         #if np.isnan(train_loss):
         #    pass
@@ -120,7 +129,9 @@ def train(model, dataloader, criterion, optimizer,scaler, subvolumeSize):
     
         # remove unnecessary cache in CUDA memory
         torch.cuda.empty_cache()
-        del x, y_recons, latentSpaceTensorNormalized, RecoLoss, RecoLoss_normalized, MultiSimLoss_normalized, latentSpaceTensor, MultiSimLoss
+        del x, y_recons, latentSpaceTensorNormalized, RecoLoss, RecoLoss_normalized, MultiSimLoss_normalized, latentSpaceTensor, MultiSimLoss, commbinedNormalizedLoss
+
+        #print("Batch %i, elapsed time %f" %(i, time.time()-startTime))
 
     print("RecoLoss_normalized = %.2E, MultiSimLoss_normalized = %.2E" %(RecoLoss_ledger, MultiSimLoss_ledger))
 
@@ -141,8 +152,9 @@ if __name__ == "__main__":
 
     # configurations for the task
     config = {
-        "batchSize": 128,
-        "epochs": 300,
+        "batchSize": 60,
+        "nAugmentedSamples": 48, # number of augmented samples
+        "epochs": 100,
         "lr": 1e-4,   # learning rate
     }
 
@@ -150,11 +162,11 @@ if __name__ == "__main__":
     # Create a dataset from a folder containing images
 
     subvolumeSize = 32
-    latentSpaceSize = 256
+    latentSpaceSize = 64
 
     # size is 4801, 9110, 7338
-    imageFilePath = "/media/ssdshare1/general/computational_projects/brain_segmentation/DaeHee_NeuN_data/20190621_11_58_27_349_fullbrain_488LP30_561LP140_642LP100/Ex_2_Em_2_destriped_stitched_master"
-    #imageFilePath = "NeuNBrainSegment_compressed.tiff"
+    #imageFilePath = "/media/ssdshare1/general/computational_projects/brain_segmentation/DaeHee_NeuN_data/20190621_11_58_27_349_fullbrain_488LP30_561LP140_642LP100/Ex_2_Em_2_destriped_stitched_master"
+    imageFilePath = "NeuNBrainSegment_compressed.tiff"
 
     #dataset = ImageSubvolumeDataset(imageFilePath, subvolumeSize = subvolumeSize, minimumFractionalFill= 1E-4,
     #                                regionOfRelevance=(slice(1000,1000+subvolumeSize*40), slice(0,4500),slice(0,3500)))
@@ -162,9 +174,10 @@ if __name__ == "__main__":
     # increase limit with: ulimit -n <limit>
 
     dataset = ImageSubvolumeDataset(imageFilePath, subvolumeSize = subvolumeSize, minimumFractionalFill= 1E-4,
-                                    regionOfRelevance=(slice(1000,1064), slice(2000,2000+3000),slice(950,900+2700)),
                                     batchSize = config["batchSize"], randomBatches = True ,
-                                    nAugmentedSamples = 64 )
+                                    nAugmentedSamples = config["nAugmentedSamples"] , nThreads = 6,
+                                    regionOfRelevance=slice(None,None))
+                                    #regionOfRelevance=(slice(1000,1064), slice(2000,2000+3000),slice(950,900+2700)),
                                     #regionOfRelevance=(slice(1000,1064), slice(0,4500),slice(0,3500)))
 
     train_loader = torch.utils.data.DataLoader(dataset, batch_size= config["batchSize"], 
@@ -172,6 +185,10 @@ if __name__ == "__main__":
 
 
     model = BrainEncoder.AutoEncoder(latentSpaceSize = latentSpaceSize).to(DEVICE)
+
+    model.load_state_dict(torch.load("BrainEncoder_LD64_L2_MS_Pretrained.pth"))
+    #model.load_state_dict(torch.load("BrainEncoder_LD64_L2Pretrained.pth"))
+    #model.load_state_dict(torch.load("BrainEncoder_LD64_epoch012.pth"))
 
     ### Prep Training
     criterion = torch.nn.MSELoss()
@@ -188,14 +205,14 @@ if __name__ == "__main__":
         epochStartTime = time.time()
 
         curr_lr = float(optimizer.param_groups[0]["lr"])
-        train_loss = train(model, dataset, criterion, optimizer,scaler, subvolumeSize)
+        train_loss = train(model, dataset, criterion, optimizer,scaler, subvolumeSize,config)
         
         epochTimeElapsed = time.time()-epochStartTime
 
         #print(f"Epoch {i+1}/{config['epochs']}\nTrain loss: {train_loss:.2E}\t lr: {curr_lr:.2E}, epoch time: {epochTimeElapsed:.1f} s'")
         print(f"Epoch {i+1}/{config['epochs']}, Epoch time: {epochTimeElapsed:.1f} s'")
 
-        torch.save(model.state_dict(), 'BrainEncoder_LD%i.pth' %latentSpaceSize)
+        torch.save(model.state_dict(), 'BrainEncoder_LD%i_epoch%s.pth' %(latentSpaceSize, str(i).zfill(3)))
 
 
     # Save the trained model
