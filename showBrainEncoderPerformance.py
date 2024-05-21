@@ -95,14 +95,14 @@ def showModelVerisimilitude(model, aDataloader, nTensorsToPlot = None,
 
 if __name__ == "__main__":
 
-    inputModel = "BrainEncoder_LD256.pth"
+    inputModel = "BrainEncoder_LD64_epoch012.pth"
 
     # Checking is CUDA available on current machine
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     print("Project running on device: ", DEVICE)
 
     # configurations for the task
-    config = {"batchSize": 10}
+    config = {"batchSize": 15}
 
     #                       1 or more digits after the string "LD"
     latentSpaceDimensionality = int(re.search("(?<=LD)\d+",inputModel).group())
@@ -113,7 +113,7 @@ if __name__ == "__main__":
     model.load_state_dict(torch.load(inputModel))
     
 
-    model.eval()  # Set the model to evaluation mode
+    #model.eval()  # Set the model to evaluation mode
 
     # Create a dataset from a folder containing images
 
