@@ -17,7 +17,14 @@ class MultiSimilarityLoss(nn.Module):
         self.scale_pos = 2.0  # cfg.LOSSES.MULTI_SIMILARITY_LOSS.SCALE_POS
         self.scale_neg = 40.0 # cfg.LOSSES.MULTI_SIMILARITY_LOSS.SCALE_NEG
 
-    def forward(self, features, labels):
+
+    def SqEuclideanDistance(self, x, y):
+        """
+        Compute the Euclidean Distance between two tensors
+        """
+        return torch.pow(x - y, 2).sum(1)
+
+    def forward(self, features, labels, maxDistForPosPair=0, minDistForNegativePair=0, nUnaugmentedSamples = -1):
         assert features.size(0) == labels.size(0), \
             f"features.size(0): {features.size(0)} is not equal to labels.size(0): {labels.size(0)}"
         batch_size = features.size(0)
@@ -27,13 +34,18 @@ class MultiSimilarityLoss(nn.Module):
         loss = list()
 
         for i in range(batch_size):
-            if i > 0: break
-            pos_pair_ = sim_mat[i][labels == labels[i]]
+            if i == nUnaugmentedSamples: break
+
+            sq_dist = self.SqEuclideanDistance(labels[i], labels)
+
+            pos_pair_ = sim_mat[i][sq_dist <= (maxDistForPosPair**2 + epsilon) ]
+            #pos_pair_ = sim_mat[i][labels == labels[i]]
             pos_pair_ = pos_pair_[pos_pair_ < 1 - epsilon]
 
             if len(pos_pair_) < 1: continue
 
-            neg_pair_ = sim_mat[i][labels != labels[i]]
+            neg_pair_ = sim_mat[i][sq_dist > (minDistForNegativePair**2 + epsilon) ]
+            #neg_pair_ = sim_mat[i][labels != labels[i]]
 
             neg_pair = neg_pair_[neg_pair_ + self.margin > min(pos_pair_)]
 
@@ -53,5 +65,5 @@ class MultiSimilarityLoss(nn.Module):
         if len(loss) == 0:
             return torch.zeros([], requires_grad=True)
 
-        loss = sum(loss) / batch_size
+        loss = sum(loss) #/ batch_size
         return loss
