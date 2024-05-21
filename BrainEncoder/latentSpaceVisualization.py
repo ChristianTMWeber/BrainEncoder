@@ -3,10 +3,17 @@ import numpy as np
 
 import sklearn.manifold as manifold
 import sklearn.cluster  as cluster
+import sklearn.metrics as  metrics
 
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+
+import skimage
+
+from PIL import Image
+
+import tifffile
 
 def getLatentSpaceVectors(model, DEVICE, data_loader, saveAs = None):
 
@@ -28,7 +35,7 @@ def getLatentSpaceVectors(model, DEVICE, data_loader, saveAs = None):
     latentSpaceVectors = []
     labelList=[]
 
-    model.eval() # Switch the model to evaluation mode
+    #model.eval() # Switch the model to evaluation mode
 
     with torch.no_grad():
         with torch.cuda.amp.autocast():
@@ -54,12 +61,13 @@ def getLatentSpaceVectors(model, DEVICE, data_loader, saveAs = None):
 
     return latentSpaceVectors , labelList
 
-def plotLatentSpaceVectors(latentSpaceVectors, nClusters = None, doShow = True, outputFileName = None, TSNE_embedding_store = []):
+def plotLatentSpaceVectors(latentSpaceArray, nClusters = None, doShow = True, outputFileName = None, 
+                           TSNE_embedding_store = []):
 
     n_components = 2
     TSNE = manifold.TSNE(n_components)
 
-    latentSpaceArray = np.asarray(latentSpaceVectors)
+    #latentSpaceArray = np.asarray(latentSpaceVectors)
 
     if len(TSNE_embedding_store) == 0: 
         tsne_embedding = TSNE.fit_transform(latentSpaceArray)
@@ -108,7 +116,9 @@ if __name__ == "__main__":
 
 
 
-    inputModel = os.path.join(script_path,"../BrainEncoder_LD256.pth")
+    #inputModel = os.path.join(script_path,"../BrainEncoder_LD64_L2Pretrained.pth")
+    inputModel = os.path.join(script_path,"../BrainEncoder_LD64_epoch040.pth")
+    # 
 
     import BrainEncoder as BrainEncoder
     from ImageSubvolumeDataset import ImageSubvolumeDataset
@@ -135,8 +145,13 @@ if __name__ == "__main__":
                                               shuffle=False, collate_fn=dataset.collate_array)
     
     latentSpaceVectors , labelList = getLatentSpaceVectors(model, DEVICE, data_loader)
+    latentSpaceArray = np.asarray(latentSpaceVectors)[:,0:8]
 
-    for nClusters in range(3,11):
+
+    # normalize the latent space vectors
+    #latentSpaceVectors = [ x / np.linalg.norm(x) for x in latentSpaceVectors]
+
+    for nClusters in range(2,11):
 
         plotName = "LatenSpaceVisualization_LD%i_ncluster_%s.png" %(latentSpaceDimensionality, str(nClusters).zfill(2))
 
