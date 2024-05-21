@@ -103,8 +103,81 @@ def plotLatentSpaceVectors(latentSpaceArray, nClusters = None, doShow = True, ou
     if doShow: plt.show()
     if outputFileName is not None: plt.savefig(outputFileName)
 
+
+    silhouetteScore = metrics.silhouette_score( latentSpaceArray , kmeans_labels, metric='euclidean')
+
+    print( "K-means cluster with k=%i: Silhouette score = %f" %(nClusters, silhouetteScore))
+
+    return kmeans_labels
+
+
+def colorImageByClusterIndex(imageNPArray, latentSpaceArray,clusterIndexArray, labelArray, subvolumeSize, clusterK):
+
+    score = metrics.silhouette_score( latentSpaceArray , clusterIndexArray, metric='euclidean')
+
+    # (34, 34, 34), ### one color that I had removed from the list
+    kelly_colors = [(242, 243, 244), (243, 195, 0), (135, 86, 146), (243, 132, 0), (161, 202, 241), (190, 0, 50), (194, 178, 128), (132, 132, 130), 
+                    (0, 136, 86), (230, 143, 172), (0, 103, 165), (249, 147, 121), (96, 78, 151), (246, 166, 0), (179, 68, 108), (220, 211, 0), (136, 45, 23), 
+                    (141, 182, 0), (101, 69, 34), (226, 88, 34), (43, 61, 38), 
+                    ] 
+
+    alphaArray = np.sum(imageNPArray[0:0+subvolumeSize,:,:], axis=0)
+    alphaArray  = (alphaArray-np.min(alphaArray)) / (np.max(alphaArray)-np.min(alphaArray)) * 255 * 50
+    alphaArray  = alphaArray.astype(np.uint8)
+
+    clusterColorArray = np.zeros( list(np.shape(alphaArray))+[3] , dtype=np.uint8)
+    nonEmptyArray = np.zeros( list(np.shape(alphaArray))+[3] , dtype=np.uint8)
+
+    for label, clusterID in zip(labelArray, clusterIndexArray):
+
+        if label[0] >0: continue
+
+        sliceTuple = (slice(label[1],label[1]+subvolumeSize), slice(label[2],label[2]+subvolumeSize), slice(None))
+
+        clusterColorArray[sliceTuple] = kelly_colors[clusterID]
+        nonEmptyArray[sliceTuple] = 255
+
+
+    alpha_image = Image.fromarray(alphaArray, 'L')
+    image = Image.fromarray(clusterColorArray)
+    image.putalpha(alpha_image)
+    image.save('ImageClusterColord_k=%i.png' %(clusterK))  
+
+    nonEmptyImage = Image.fromarray(nonEmptyArray)
+    nonEmptyImage.save('nonEmptySubvolumes.png')  
+
+    imageClusterColorsOnly = Image.fromarray(clusterColorArray)
+    imageClusterColorsOnly.save('clusterColorsOnly_k=%i.png' %(clusterK))  
+
+    alpha_image = Image.fromarray(alphaArray, 'L')
+    alpha_image.save('BrainImage.png')  
+
+
+    tifffile.imwrite('BrainImage.tiff', alphaArray)
+
+
     return None
 
+
+
+def outputVolume(imageArray, nonEmptySlices, outputFileName = None):
+    # visualize elements of the volume that we consider non-empty
+
+    outputArray = np.zeros( np.shape(imageArray), dtype=np.uint8)
+
+    for sliceTuple in nonEmptySlices:
+
+        outputArray[sliceTuple] = 255
+
+
+    if outputFileName is not None: 
+        tifffile.imwrite(outputFileName, outputArray, compression='zlib')
+    
+    return None
+
+    
+    
+    
 
 
 if __name__ == "__main__":
@@ -139,8 +212,24 @@ if __name__ == "__main__":
 
     subvolumeSize = 32
 
-    dataset = ImageSubvolumeDataset("../NeuNBrainSegment_compressed.tiff", subvolumeSize = subvolumeSize)
+    #imageFilePath = "/media/ssdshare1/general/computational_projects/brain_segmentation/DaeHee_NeuN_data/20190621_11_58_27_349_fullbrain_488LP30_561LP140_642LP100/Ex_2_Em_2_destriped_stitched_master"
+    #dataset = ImageSubvolumeDataset(imageFilePath, subvolumeSize = subvolumeSize, minimumFractionalFill= 1E-4,
+    #                                regionOfRelevance=(slice(1000,1064), slice(2000,2000+3000),slice(950,900+2700)),
+    #                                batchSize = config["batchSize"], randomBatches = False ,
+    #                                nAugmentedSamples = 0 )
+    #                                #regionOfRelevance=(slice(1000,1064), slice(2000,2000+3000),slice(950,900+2700)))
+    #                                #regionOfRelevance=(slice(1000,1064), slice(0,4500),slice(0,3500)))
 
+
+    imageFilePath = "NeuNBrainSegment_compressed.tiff"
+    dataset = ImageSubvolumeDataset(imageFilePath, subvolumeSize = subvolumeSize, minimumFractionalFill= 1E-4,
+                                    regionOfRelevance=(slice(None)),
+                                    batchSize = config["batchSize"], randomBatches = False ,
+                                    nAugmentedSamples = 0 )
+    
+
+    outputVolume(dataset.imageNPArray, dataset.subvolumeSlices, outputFileName = "nonEmptySubvolumes.tiff")
+    
     data_loader = torch.utils.data.DataLoader(dataset, batch_size= config["batchSize"], 
                                               shuffle=False, collate_fn=dataset.collate_array)
     
@@ -155,7 +244,10 @@ if __name__ == "__main__":
 
         plotName = "LatenSpaceVisualization_LD%i_ncluster_%s.png" %(latentSpaceDimensionality, str(nClusters).zfill(2))
 
-        plotLatentSpaceVectors(latentSpaceVectors, nClusters = nClusters, outputFileName = plotName)
+        clusterIndexArray =plotLatentSpaceVectors(latentSpaceArray, nClusters = nClusters, 
+                            outputFileName = plotName)
+        
+        colorImageByClusterIndex(dataset.imageNPArray, latentSpaceArray,clusterIndexArray, labelList,subvolumeSize,nClusters)
 
 
     print("Done!")
