@@ -22,6 +22,8 @@ dependencies:
   - rasterio
   - zarr
   - psutil
+  - ray-all 
+  #- albumentations
   #- pip
   #- pip:
   #    - torchinfo  # Optional, for model summaries
